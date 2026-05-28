@@ -59,10 +59,6 @@
                 </div>
                 <p class="text-xs text-gray-500 mt-2">Nota: Mostrar todas las aristas simultáneamente genera cientos de flechas.</p>
             </div>
-
-            <button id="generateBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition-colors">
-                Generar Grafo
-            </button>
             
             <div class="mt-8 bg-blue-50 border border-blue-200 p-4 rounded-lg">
                 <h3 class="font-semibold text-blue-800 text-sm mb-1">Info del Grafo</h3>
@@ -300,8 +296,7 @@
             });
         }
 
-        // Event Listeners
-        document.getElementById('generateBtn').addEventListener('click', drawGraph);
+        // Event Listener
         document.getElementById('pieceSelect').addEventListener('change', drawGraph);
         
         // Redibujar si cambia el modo de visualización
