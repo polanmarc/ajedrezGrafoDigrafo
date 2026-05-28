@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grafo Dirigido de Ajedrez</title>
+    <!-- Tailwind CSS para diseño -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vis.js para la visualización de Grafos -->
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        #mynetwork {
+            width: 100%;
+            height: 100%;
+            background-color: #f8fafc;
+        }
+        .vis-network:focus {
+            outline: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col md:flex-row overflow-hidden text-gray-800">
+
+    <!-- Panel de Gestión (Sidebar) -->
+    <div class="w-full md:w-1/4 bg-white shadow-xl flex flex-col z-10">
+        <div class="p-6 bg-slate-800 text-white">
+            <h1 class="text-2xl font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3v5"/><path d="M6 3v5"/><path d="M4 10h16"/><path d="M5 10v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-11"/><path d="M9 14h.01"/><path d="M15 14h.01"/><path d="M12 18h.01"/></svg>
+                Gestor de Grafos
+            </h1>
+            <p class="text-sm text-slate-300 mt-2">Tablero de Ajedrez (Digraph)</p>
+        </div>
+
+        <div class="p-6 flex-1 overflow-y-auto">
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Seleccionar Pieza</label>
+                <select id="pieceSelect" class="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                    <option value="knight">Caballo (Saltos en L)</option>
+                    <option value="king">Rey (1 casilla)</option>
+                    <option value="rook">Torre (Recto)</option>
+                    <option value="bishop">Alfil (Diagonal)</option>
+                    <option value="pawn">Peón Blanco (Solo avance - Digrafo Estricto)</option>
+                </select>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Modo de Visualización</label>
+                <div class="flex items-center gap-4">
+                    <label class="flex items-center text-sm cursor-pointer">
+                        <input type="radio" name="viewMode" value="selected" checked class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+                        <span class="ml-2">Al hacer clic (Recomendado)</span>
+                    </label>
+                </div>
+                <div class="flex items-center gap-4 mt-2">
+                    <label class="flex items-center text-sm cursor-pointer text-red-600 font-medium">
+                        <input type="radio" name="viewMode" value="all" class="w-4 h-4 text-red-600 focus:ring-red-500">
+                        <span class="ml-2">Mostrar todas las aristas (¡Caos!)</span>
+                    </label>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">Nota: Mostrar todas las aristas simultáneamente genera cientos de flechas.</p>
+            </div>
+
+            <button id="generateBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition-colors">
+                Generar Grafo
+            </button>
+            
+            <div class="mt-8 bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                <h3 class="font-semibold text-blue-800 text-sm mb-1">Info del Grafo</h3>
+                <ul class="text-sm text-blue-900 space-y-1">
+                    <li><strong>Nodos (|V|):</strong> 64</li>
+                    <li><strong>Aristas Dirigidas (|E|):</strong> <span id="edgeCount">0</span></li>
+                    <li><strong>Tipo:</strong> Digrafo (Dirigido)</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Área del Grafo (Canvas) -->
+    <div class="flex-1 relative">
+        <div id="mynetwork"></div>
+        <div class="absolute bottom-4 right-4 bg-white/90 px-4 py-2 rounded shadow text-sm font-medium text-gray-600 pointer-events-none">
+            Puedes hacer Zoom y mover la cuadrícula.
+        </div>
+    </div>
+
+    <script>
+        // Variables globales para la red
+        let network = null;
+        let nodesDataset = new vis.DataSet([]);
+        let edgesDataset = new vis.DataSet([]);
+        let allEdges = [];
+
+        // Nombres de las columnas del tablero
+        const cols = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+        // Función para inicializar el tablero (Nodos fijos en cuadrícula)
+        function generateNodes() {
+            const nodes = [];
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const id = cols[col] + (row + 1);
+                    // Lógica para color de tablero tradicional (A1 es oscuro, etc.)
+                    const isDark = (row + col) % 2 === 0; 
+                    
+                    nodes.push({
+                        id: id,
+                        label: id.toUpperCase(),
+                        // Fijamos las coordenadas x, y para que forme una cuadrícula perfecta de tablero
+                        x: col * 80, 
+                        y: (7 - row) * 80, 
+                        shape: 'box',
+                        widthConstraint: { minimum: 45, maximum: 45 },
+                        heightConstraint: { minimum: 45 },
+                        font: { 
+                            color: isDark ? '#ffffff' : '#000000',
+                            face: 'monospace',
+                            bold: true
+                        },
+                        color: {
+                            background: isDark ? '#779556' : '#ebecd0',
+                            border: '#333',
+                            highlight: {
+                                background: '#f5c638',
+                                border: '#333'
+                            }
+                        },
+                        fixed: { x: true, y: true }
+                    });
+                }
+            }
+            return nodes;
+        }
+
+        // Verifica si una coordenada x,y está dentro del tablero
+        function isValidSquare(col, row) {
+            return col >= 0 && col < 8 && row >= 0 && row < 8;
+        }
+
+        // Obtiene el ID del nodo dado su columna(0-7) y fila(0-7)
+        function getId(col, row) {
+            return cols[col] + (row + 1);
+        }
+
+        // Genera todas las aristas dirigidas (movimientos) para una pieza específica
+        function generateEdges(pieceType) {
+            const edges = [];
+            
+            // Movimientos relativos (dx, dy)
+            const movesMap = {
+                'knight': [[1,2], [2,1], [2,-1], [1,-2], [-1,-2], [-2,-1], [-2,1], [-1,2]],
+                'king': [[0,1], [1,1], [1,0], [1,-1], [0,-1], [-1,-1], [-1,0], [-1,1]],
+                'pawn': [[0,1]] // Solo avanza hacia arriba (blanco), perfecto ejemplo de Digrafo unidireccional
+            };
+
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const fromId = getId(col, row);
+
+                    // Lógica para piezas con movimientos de "salto/paso único"
+                    if (['knight', 'king', 'pawn'].includes(pieceType)) {
+                        let moves = movesMap[pieceType];
+                        // Regla especial para peón: en fila inicial (row=1) puede saltar 2
+                        if (pieceType === 'pawn' && row === 1) {
+                            moves = [[0,1], [0,2]];
+                        }
+
+                        moves.forEach(m => {
+                            const newCol = col + m[0];
+                            const newRow = row + m[1];
+                            if (isValidSquare(newCol, newRow)) {
+                                edges.push(createDirectedEdge(fromId, getId(newCol, newRow)));
+                            }
+                        });
+                    }
+                    
+                    // Lógica para piezas de línea (deslizantes)
+                    if (['rook', 'bishop'].includes(pieceType)) {
+                        const directions = [];
+                        if (pieceType === 'rook') directions.push([0,1], [1,0], [0,-1], [-1,0]);
+                        if (pieceType === 'bishop') directions.push([1,1], [1,-1], [-1,-1], [-1,1]);
+
+                        directions.forEach(dir => {
+                            let r = row + dir[1];
+                            let c = col + dir[0];
+                            // Escaneamos la línea hasta salir del tablero
+                            while(isValidSquare(c, r)) {
+                                edges.push(createDirectedEdge(fromId, getId(c, r)));
+                                r += dir[1];
+                                c += dir[0];
+                            }
+                        });
+                    }
+                }
+            }
+            return edges;
+        }
+
+        // Estructura de la Arista Dirigida
+        function createDirectedEdge(from, to) {
+            return {
+                from: from,
+                to: to,
+                arrows: 'to', // Esto define que es un Digrafo (Directed Graph)
+                color: { color: '#3b82f6', opacity: 0.2, highlight: '#ef4444' },
+                width: 1,
+                selectionWidth: 3,
+                smooth: {
+                    type: 'curvedCW', // Curvas para ver movimientos de ida y vuelta sin superposición
+                    roundness: 0.2
+                },
+                hidden: true
+            };
+        }
+
+        // Función principal para renderizar el grafo
+        function drawGraph() {
+            const pieceType = document.getElementById('pieceSelect').value;
+            const viewMode = document.querySelector('input[name="viewMode"]:checked').value;
+            
+            // 1. Obtener Nodos y Aristas
+            const nodes = generateNodes();
+            allEdges = generateEdges(pieceType);
+            
+            // Actualizar conteo en UI
+            document.getElementById('edgeCount').innerText = allEdges.length;
+
+            // Mostrar aristas si el usuario seleccionó "Todos" (¡Peligro de caos visual!)
+            if (viewMode === 'all') {
+                allEdges.forEach(e => {
+                    e.hidden = false;
+                    e.color.opacity = 0.5;
+                });
+            }
+
+            nodesDataset = new vis.DataSet(nodes);
+            edgesDataset = new vis.DataSet(allEdges);
+
+            const container = document.getElementById('mynetwork');
+            const data = {
+                nodes: nodesDataset,
+                edges: edgesDataset
+            };
+            
+            // Configuración del motor Vis.js
+            const options = {
+                physics: false,
+                interaction: {
+                    dragNodes: false,
+                    hover: true,
+                    selectConnectedEdges: false
+                },
+                edges: {
+                    arrows: { to: { enabled: true, scaleFactor: 1, type: 'arrow' } }
+                }
+            };
+
+            // Destruir red anterior si existe
+            if (network !== null) network.destroy();
+            network = new vis.Network(container, data, options);
+
+            // Ajustar cámara para centrar el tablero
+            network.once("beforeDrawing", function() {
+                network.focus('e4', { scale: 0.9 });
+            });
+
+            // Lógica de interactividad: Al hacer clic en un nodo, mostrar sus salidas (Out-degree)
+            network.on("selectNode", function (params) {
+                if (viewMode === 'all') return; // Si están todas visibles, no hacer nada
+
+                const selectedNodeId = params.nodes[0];
+                const edgesToUpdate = [];
+
+                // Ocultar todas primero
+                edgesDataset.forEach(edge => {
+                    edgesToUpdate.push({ id: edge.id, hidden: true });
+                });
+
+                // Mostrar solo las aristas donde "from" es el nodo seleccionado
+                edgesDataset.forEach(edge => {
+                    if (edge.from === selectedNodeId) {
+                        edgesToUpdate.push({ 
+                            id: edge.id, 
+                            hidden: false,
+                            color: { color: '#ef4444', opacity: 1 }
+                        });
+                    }
+                });
+
+                edgesDataset.update(edgesToUpdate);
+            });
+
+            // Ocultar aristas si se deselecciona el nodo
+            network.on("deselectNode", function (params) {
+                if (viewMode === 'all') return;
+                const edgesToUpdate = [];
+                edgesDataset.forEach(edge => {
+                    edgesToUpdate.push({ id: edge.id, hidden: true });
+                });
+                edgesDataset.update(edgesToUpdate);
+            });
+        }
+
+        // Event Listeners
+        document.getElementById('generateBtn').addEventListener('click', drawGraph);
+        document.getElementById('pieceSelect').addEventListener('change', drawGraph);
+        
+        // Redibujar si cambia el modo de visualización
+        document.querySelectorAll('input[name="viewMode"]').forEach(radio => {
+            radio.addEventListener('change', drawGraph);
+        });
+
+        // Dibujar grafo inicial al cargar
+        window.addEventListener('load', drawGraph);
+    </script>
+</body>
+</html>
